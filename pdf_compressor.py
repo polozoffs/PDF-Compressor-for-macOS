@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-PDF Compressor for macOS
+PDF Compressor for any platform, with a focus on macOS aesthetics and functionality.
 A simple GUI application to compress PDF files
 """
 
@@ -21,7 +21,7 @@ class PDFCompressor:
     def __init__(self, root):
         self.root = root
         self.root.title("PDF Compressor")
-        self.root.geometry("500x300")
+        self.root.geometry("500x450")
         self.root.resizable(True, True)
         
         # Variables
