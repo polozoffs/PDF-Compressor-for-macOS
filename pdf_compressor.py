@@ -9,13 +9,8 @@ from tkinter import filedialog, messagebox, ttk
 import os
 import sys
 from pathlib import Path
-
-try:
-    import PyPDF2
-except ImportError:
-    print("PyPDF2 not found. Installing...")
-    os.system(f"{sys.executable} -m pip install PyPDF2")
-    import PyPDF2
+import subprocess
+import tempfile
 
 class PDFCompressor:
     def __init__(self, root):
@@ -165,37 +160,64 @@ class PDFCompressor:
             messagebox.showerror("Error", f"An error occurred: {str(e)}")
     
     def perform_compression(self, input_path, output_path):
+        # Determine Ghostscript settings based on compression level
+        compression_level = self.compression_level.get()
+        
+        if compression_level == 'light':
+            pdf_settings = '/screen'  # 72 DPI
+            image_resolution = 150
+        elif compression_level == 'medium':
+            pdf_settings = '/ebook'  # 150 DPI
+            image_resolution = 150
+        else:  # heavy
+            pdf_settings = '/screen'  # 72 DPI  
+            image_resolution = 72
+        
+        # Check if gs (Ghostscript) is available
+        gs_command = None
+        for cmd in ['gs', '/usr/local/bin/gs', '/opt/homebrew/bin/gs']:
+            try:
+                result = subprocess.run([cmd, '--version'], capture_output=True, timeout=5)
+                if result.returncode == 0:
+                    gs_command = cmd
+                    break
+            except:
+                continue
+        
+        if not gs_command:
+            raise Exception("Ghostscript not found. Please install it with: brew install ghostscript")
+        
+        # Use Ghostscript to compress the PDF
+        gs_args = [
+            gs_command,
+            '-sDEVICE=pdfwrite',
+            '-dCompatibilityLevel=1.4',
+            f'-dPDFSETTINGS={pdf_settings}',
+            '-dNOPAUSE',
+            '-dQUIET',
+            '-dBATCH',
+            '-dDetectDuplicateImages=true',
+            '-dCompressFonts=true',
+            '-dCompressPages=true',
+            f'-dDownsampleColorImages=true',
+            f'-dColorImageResolution={image_resolution}',
+            f'-dDownsampleGrayImages=true',
+            f'-dGrayImageResolution={image_resolution}',
+            f'-dDownsampleMonoImages=true',
+            f'-dMonoImageResolution={image_resolution}',
+            f'-sOutputFile={output_path}',
+            input_path
+        ]
+        
         try:
-            with open(input_path, 'rb') as input_file:
-                reader = PyPDF2.PdfReader(input_file)
-                writer = PyPDF2.PdfWriter()
-                
-                # Copy pages and apply compression
-                for page in reader.pages:
-                    # Apply compression based on selected level
-                    if self.compression_level.get() == "light":
-                        page.compress_content_streams()
-                    elif self.compression_level.get() == "medium":
-                        page.compress_content_streams()
-                        # Remove duplicate objects
-                        if hasattr(page, 'scale_by'):
-                            page.scale_by(0.95)  # Slight scaling
-                    else:  # heavy
-                        page.compress_content_streams()
-                        if hasattr(page, 'scale_by'):
-                            page.scale_by(0.9)  # More aggressive scaling
-                    
-                    writer.add_page(page)
-                
-                # Write compressed PDF
-                with open(output_path, 'wb') as output_file:
-                    writer.write(output_file)
-                
-                return True
-                
+            result = subprocess.run(gs_args, capture_output=True, text=True, timeout=300)
+            if result.returncode != 0:
+                raise Exception(f"Ghostscript error: {result.stderr}")
+            return True
+        except subprocess.TimeoutExpired:
+            raise Exception("Compression timed out (file too large)")
         except Exception as e:
-            print(f"Compression error: {e}")
-            return False
+            raise Exception(f"Compression failed: {str(e)}")
     
     def format_file_size(self, size_bytes):
         if size_bytes < 1024:
